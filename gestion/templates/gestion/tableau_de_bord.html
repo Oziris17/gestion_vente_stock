@@ -1,0 +1,93 @@
+{% extends 'gestion/base.html' %}
+
+{% block title %}Tableau de Bord - GestionPro{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h3 class="fw-bold text-dark mb-0">Tableau de Bord</h3>
+        <p class="text-muted small">Aperçu rapide des commandes et livraisons</p>
+    </div>
+    <a href="{% url 'creer_commande' %}" class="btn btn-primary-custom btn-primary shadow-sm px-4">
+        <i class="bi bi-plus-lg me-2"></i>Nouvelle Commande
+    </a>
+</div>
+
+<div class="row g-4">
+    <!-- Section Commandes -->
+    <div class="col-lg-6">
+        <div class="card card-custom p-3 h-100">
+            <div class="d-flex justify-content-between align-items-center mb-3 px-2">
+                <h5 class="fw-bold text-secondary mb-0"><i class="bi bi-cart-check me-2 text-primary"></i>Commandes Fournisseurs</h5>
+                <span class="badge bg-primary rounded-pill">{{ commandes|length }}</span>
+            </div>
+            <div class="table-responsive">
+                <table class="table align-middle table-custom table-hover mb-0">
+                    <thead>
+                        <tr>
+                            <th>N° Commande</th>
+                            <th>Fournisseur</th>
+                            <th>Statut</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for c in commandes %}
+                        <tr>
+                            <td class="fw-semibold text-dark">#{{ c.numero_commande }}</td>
+                            <td>{{ c.fournisseur.nom }}</td>
+                            <td>
+                                <span class="badge bg-info bg-opacity-10 text-info px-3 py-2 rounded-pill">
+                                    {{ c.statut }}
+                                </span>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="3" class="text-center text-muted py-4">Aucune commande enregistrée.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Section Livraisons -->
+    <div class="col-lg-6">
+        <div class="card card-custom p-3 h-100">
+            <div class="d-flex justify-content-between align-items-center mb-3 px-2">
+                <h5 class="fw-bold text-secondary mb-0"><i class="bi bi-truck me-2 text-success"></i>Livraisons Récentes</h5>
+                <span class="badge bg-success rounded-pill">{{ livraisons|length }}</span>
+            </div>
+            <div class="table-responsive">
+                <table class="table align-middle table-custom table-hover mb-0">
+                    <thead>
+                        <tr>
+                            <th>N° Livraison</th>
+                            <th>Commande</th>
+                            <th>Statut</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for l in livraisons %}
+                        <tr>
+                            <td class="fw-semibold text-dark">#{{ l.numero_livraison }}</td>
+                            <td>#{{ l.commande.numero_commande }}</td>
+                            <td>
+                                <span class="badge bg-success bg-opacity-10 text-success px-3 py-2 rounded-pill">
+                                    {{ l.statut }}
+                                </span>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="3" class="text-center text-muted py-4">Aucune livraison enregistrée.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
