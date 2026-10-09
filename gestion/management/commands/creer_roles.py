@@ -8,6 +8,8 @@ ROLES = {
         'produits': ['view', 'add', 'change'],
         'categorie': ['view', 'add', 'change'],
         'marque': ['view', 'add', 'change'],
+        'stock': ['view', 'change'],            # change = modifier le seuil d'alerte
+        'mouvementstock': ['view', 'add'],
     },
     'Responsable achats': {
         'fournisseur': ['view', 'add', 'change'],
@@ -16,11 +18,14 @@ ROLES = {
         'livraison': ['view', 'add', 'change'],
         'lignelivraison': ['view', 'add', 'change'],
         'produits': ['view'],
+        'stock': ['view'],
+        'mouvementstock': ['view', 'add'],      # enregistrer les réceptions de marchandises
     },
     'Vendeur': {
         'produits': ['view'],
         'commande': ['view', 'change'],
         'lignecommande': ['view'],
+        'stock': ['view'],
     },
 }
 

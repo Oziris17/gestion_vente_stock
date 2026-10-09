@@ -1,0 +1,39 @@
+{% extends 'gestion/base.html' %}
+{% block title %}Stock - Gestion{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+  <h3 class="fw-bold mb-0">Stock{% if filtre_alerte %} <small class="text-danger fs-6">(produits en alerte)</small>{% endif %}</h3>
+  <div>
+    <a href="{% url 'tableau_de_bord' %}" class="btn btn-outline-secondary me-1">Retour</a>
+    {% if filtre_alerte %}
+      <a href="{% url 'stock_liste' %}" class="btn btn-outline-primary me-1">Voir tout</a>
+    {% else %}
+      <a href="?alerte=1" class="btn btn-outline-danger me-1">Alertes seulement</a>
+    {% endif %}
+    {% if perms.gestion.view_mouvementstock %}<a href="{% url 'mouvement_liste' %}" class="btn btn-outline-primary me-1">Historique</a>{% endif %}
+    {% if perms.gestion.add_mouvementstock %}
+      <a href="{% url 'mouvement_creer' %}" class="btn btn-primary-custom btn-primary"><i class="bi bi-plus-lg me-1"></i>Nouveau mouvement</a>
+    {% endif %}
+  </div>
+</div>
+<div class="card card-custom p-3">
+  <div class="table-responsive">
+    <table class="table align-middle table-custom table-hover mb-0">
+      <thead><tr><th>Produit</th><th>Magasin</th><th>Quantité</th><th>Seuil d'alerte</th><th>État</th><th></th></tr></thead>
+      <tbody>
+      {% for s in stocks %}
+        <tr>
+          <td>{{ s.produit.nom }}</td><td>{{ s.magasin.nom }}</td>
+          <td>{{ s.quantite|floatformat:"-3g" }}</td><td>{{ s.seuil_alerte|floatformat:"-3g" }}</td>
+          <td>{% if s.en_alerte %}<span class="badge bg-danger">En alerte</span>{% else %}<span class="badge bg-success">OK</span>{% endif %}</td>
+          <td>{% if perms.gestion.change_stock %}<a href="{% url 'stock_seuil' s.pk %}">Modifier le seuil</a>{% endif %}</td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="6" class="text-center text-muted py-4">Aucun stock enregistré. Un produit apparaît ici dès son premier mouvement (une entrée, par exemple).</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% include 'gestion/_pagination.html' %}
+{% endblock %}

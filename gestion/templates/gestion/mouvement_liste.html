@@ -1,0 +1,28 @@
+{% extends 'gestion/base.html' %}
+{% block title %}Mouvements de stock - Gestion{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h3 class="fw-bold mb-0">Historique des mouvements</h3>
+  <a href="{% url 'tableau_de_bord' %}" class="btn btn-outline-secondary">Retour</a>
+</div>
+<div class="card card-custom p-3">
+  <div class="table-responsive">
+    <table class="table align-middle table-custom table-hover mb-0">
+      <thead><tr><th>Date</th><th>Produit</th><th>Magasin</th><th>Type</th><th>Quantité</th><th>Avant</th><th>Après</th><th>Motif</th><th>Par</th></tr></thead>
+      <tbody>
+      {% for m in mouvements %}
+        <tr>
+          <td>{{ m.date_mouvement|date:"d/m/Y H:i" }}</td><td>{{ m.produit.nom }}</td><td>{{ m.magasin.nom }}</td>
+          <td>{{ m.get_type_mouvement_display }}</td>
+          <td>{{ m.quantite|floatformat:"-3g" }}</td><td>{{ m.quantite_avant|floatformat:"-3g" }}</td><td>{{ m.quantite_apres|floatformat:"-3g" }}</td>
+          <td>{{ m.motif }}</td><td>{{ m.auteur.username|default:"-" }}</td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="9" class="text-center text-muted py-4">Aucun mouvement.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% include 'gestion/_pagination.html' %}
+{% endblock %}

@@ -11,12 +11,22 @@
   {% if perms.gestion.view_commande %}
     <div class="col-md-4"><a class="btn btn-outline-primary w-100 py-3" href="{% url 'commande_client_liste' %}"><i class="bi bi-receipt me-2"></i>Commandes clients</a></div>
   {% endif %}
+  {% if perms.gestion.view_stock %}
+    <div class="col-md-4"><a class="btn btn-outline-primary w-100 py-3" href="{% url 'stock_liste' %}"><i class="bi bi-boxes me-2"></i>Stock{% if nb_alertes %} <span class="badge bg-danger">{{ nb_alertes }}</span>{% endif %}</a></div>
+  {% endif %}
+  {% if perms.gestion.view_mouvementstock %}
+    <div class="col-md-4"><a class="btn btn-outline-primary w-100 py-3" href="{% url 'mouvement_liste' %}"><i class="bi bi-arrow-left-right me-2"></i>Mouvements de stock</a></div>
+  {% endif %}
   {% if perms.gestion.add_commandefournisseur %}
     <div class="col-md-4"><a class="btn btn-outline-primary w-100 py-3" href="{% url 'creer_commande' %}"><i class="bi bi-plus-lg me-2"></i>Nouvelle commande fournisseur</a></div>
   {% endif %}
 </div>
 
-{% if not perms.gestion.view_produits and not perms.gestion.view_commande and not perms.gestion.view_commandefournisseur and not perms.gestion.view_livraison %}
+{% if magasin_en_ligne_manquant %}
+  <div class="alert alert-warning">Aucun magasin n'est désigné pour la vente en ligne : les clients ne peuvent pas commander. L'administrateur principal doit cocher « Vente en ligne » sur un magasin dans /admin/.</div>
+{% endif %}
+
+{% if not perms.gestion.view_produits and not perms.gestion.view_commande and not perms.gestion.view_commandefournisseur and not perms.gestion.view_livraison and not perms.gestion.view_stock %}
   <div class="alert alert-warning">Aucun droit ne vous a encore été attribué. Contactez l'administrateur principal.</div>
 {% endif %}
 

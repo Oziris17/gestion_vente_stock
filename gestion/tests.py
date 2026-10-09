@@ -1,12 +1,17 @@
 from decimal import Decimal
 
+from django.db import IntegrityError, transaction
+
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
 from django.core.management import call_command
 from django.test import TestCase
 from django.urls import reverse
 
-from .models import Categorie, Commande, CommandeFournisseur, Fournisseur, Magasin, Produits
+from .models import (
+    Categorie, Commande, CommandeFournisseur, Fournisseur, Magasin, MouvementStock, Produits, Stock,
+)
+from .stock import StockInsuffisant, enregistrer_mouvement
 
 User = get_user_model()
 
@@ -24,6 +29,10 @@ class BaseTestCase(TestCase):
         cls.p_inactif = Produits.objects.create(
             code_produit='P2', nom='Produit retiré', prix_achat=Decimal('100'), prix_vente=Decimal('150'),
             categorie=cls.cat, unite_mesure='u', taux_tva=Decimal('0'), actif=False)
+        # Magasin dont le stock sert aux commandes du site + 10 unités en stock du produit actif
+        cls.magasin = Magasin.objects.create(code_magasin='WEB', nom='Boutique en ligne', vente_en_ligne=True)
+        enregistrer_mouvement(produit=cls.p_actif, magasin=cls.magasin,
+                              type_mouvement=MouvementStock.Type.ENTREE, quantite=Decimal('10'), motif='Stock initial')
         cls.client_user = User.objects.create_user('alice', 'alice@ex.com', 'MotDePasse!2026x')
         cls.gest_stock = User.objects.create_user('stockiste', password='MotDePasse!2026x', is_staff=True)
         cls.gest_stock.groups.add(Group.objects.get(name='Gestionnaire de stock'))
@@ -172,3 +181,152 @@ class EspaceGestionTests(BaseTestCase):
         self.assertEqual(self.client.get(reverse('logout')).status_code, 405)
         self.client.post(reverse('logout'))
         self.assertNotIn('_auth_user_id', self.client.session)
+
+
+class StockServiceTests(BaseTestCase):
+    def qte(self):
+        return Stock.objects.get(produit=self.p_actif, magasin=self.magasin).quantite
+
+    def test_entree_augmente_et_journalise(self):
+        m = enregistrer_mouvement(produit=self.p_actif, magasin=self.magasin,
+                                  type_mouvement=MouvementStock.Type.ENTREE, quantite=5, auteur=self.gest_stock)
+        self.assertEqual(self.qte(), Decimal('15'))
+        self.assertEqual((m.quantite_avant, m.quantite_apres), (Decimal('10'), Decimal('15')))
+
+    def test_sortie_diminue(self):
+        enregistrer_mouvement(produit=self.p_actif, magasin=self.magasin,
+                              type_mouvement=MouvementStock.Type.SORTIE, quantite=4)
+        self.assertEqual(self.qte(), Decimal('6'))
+
+    def test_sortie_trop_grande_refusee_sans_rien_changer(self):
+        avant = MouvementStock.objects.count()
+        with self.assertRaises(StockInsuffisant):
+            enregistrer_mouvement(produit=self.p_actif, magasin=self.magasin,
+                                  type_mouvement=MouvementStock.Type.SORTIE, quantite=11)
+        self.assertEqual(self.qte(), Decimal('10'))
+        self.assertEqual(MouvementStock.objects.count(), avant)
+
+    def test_ajustement_remplace_la_quantite(self):
+        m = enregistrer_mouvement(produit=self.p_actif, magasin=self.magasin,
+                                  type_mouvement=MouvementStock.Type.AJUSTEMENT, quantite=7)
+        self.assertEqual(self.qte(), Decimal('7'))
+        self.assertEqual((m.quantite_avant, m.quantite_apres), (Decimal('10'), Decimal('7')))
+
+    def test_postgresql_refuse_un_stock_negatif(self):
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            Stock.objects.filter(produit=self.p_actif).update(quantite=Decimal('-1'))
+
+    def test_un_seul_magasin_de_vente_en_ligne(self):
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            Magasin.objects.create(code_magasin='WEB2', nom='Autre boutique', vente_en_ligne=True)
+
+
+class StockEtCommandesTests(BaseTestCase):
+    def qte(self):
+        return Stock.objects.get(produit=self.p_actif, magasin=self.magasin).quantite
+
+    def test_commande_sort_du_stock_et_cree_un_mouvement(self):
+        self.client.force_login(self.client_user)
+        self.client.post(reverse('passer_commande', args=[self.p_actif.id]), {'quantite': 3})
+        self.assertEqual(self.qte(), Decimal('7'))
+        cmd = Commande.objects.get()
+        mouv = MouvementStock.objects.get(commande_client=cmd)
+        self.assertEqual((mouv.type_mouvement, mouv.quantite, mouv.auteur), ('SORTIE', Decimal('3'), self.client_user))
+
+    def test_stock_insuffisant_refuse_la_commande(self):
+        self.client.force_login(self.client_user)
+        r = self.client.post(reverse('passer_commande', args=[self.p_actif.id]), {'quantite': 11})
+        self.assertEqual(r.status_code, 200)
+        self.assertContains(r, 'Stock insuffisant')
+        self.assertEqual(Commande.objects.count(), 0)   # la transaction a tout annulé
+        self.assertEqual(self.qte(), Decimal('10'))
+
+    def test_sans_magasin_en_ligne_les_commandes_sont_bloquees(self):
+        Magasin.objects.update(vente_en_ligne=False)
+        self.client.force_login(self.client_user)
+        r = self.client.post(reverse('passer_commande', args=[self.p_actif.id]), {'quantite': 1})
+        self.assertRedirects(r, reverse('accueil'))
+        self.assertEqual(Commande.objects.count(), 0)
+
+    def test_annulation_remet_le_stock_une_seule_fois(self):
+        self.client.force_login(self.client_user)
+        self.client.post(reverse('passer_commande', args=[self.p_actif.id]), {'quantite': 4})
+        cmd = Commande.objects.get()
+        url = reverse('commande_client_statut', args=[cmd.pk])
+        self.client.force_login(self.vendeur)
+        self.client.post(url, {'statut': 'ANNULEE'})
+        self.assertEqual(self.qte(), Decimal('10'))
+        self.client.post(url, {'statut': 'ANNULEE'})   # deuxième annulation : rien de plus
+        self.assertEqual(self.qte(), Decimal('10'))
+        self.assertEqual(MouvementStock.objects.filter(commande_client=cmd, type_mouvement='ENTREE').count(), 1)
+
+    def test_commande_annulee_non_reactivable(self):
+        self.client.force_login(self.client_user)
+        self.client.post(reverse('passer_commande', args=[self.p_actif.id]), {'quantite': 2})
+        cmd = Commande.objects.get()
+        url = reverse('commande_client_statut', args=[cmd.pk])
+        self.client.force_login(self.vendeur)
+        self.client.post(url, {'statut': 'ANNULEE'})
+        self.client.post(url, {'statut': 'CONFIRMEE'})
+        cmd.refresh_from_db()
+        self.assertEqual(cmd.statut, 'ANNULEE')
+
+    def test_catalogue_affiche_rupture_ou_commander(self):
+        r = self.client.get(reverse('accueil'))
+        self.assertContains(r, 'Commander')
+        enregistrer_mouvement(produit=self.p_actif, magasin=self.magasin,
+                              type_mouvement=MouvementStock.Type.AJUSTEMENT, quantite=0)
+        r = self.client.get(reverse('accueil'))
+        self.assertContains(r, 'Rupture de stock')
+        self.assertNotContains(r, reverse('passer_commande', args=[self.p_actif.id]))
+
+
+class StockGestionTests(BaseTestCase):
+    def donnees(self, **extra):
+        d = {'produit': self.p_actif.id, 'magasin': self.magasin.id, 'type_mouvement': 'ENTREE', 'quantite': '5', 'motif': 'Réception'}
+        d.update(extra)
+        return d
+
+    def test_gestionnaire_stock_enregistre_une_entree(self):
+        self.client.force_login(self.gest_stock)
+        r = self.client.post(reverse('mouvement_creer'), self.donnees())
+        self.assertRedirects(r, reverse('stock_liste'))
+        self.assertEqual(Stock.objects.get(produit=self.p_actif).quantite, Decimal('15'))
+        self.assertEqual(MouvementStock.objects.latest('id').auteur, self.gest_stock)
+
+    def test_sortie_trop_grande_refusee_dans_le_formulaire(self):
+        self.client.force_login(self.gest_stock)
+        r = self.client.post(reverse('mouvement_creer'), self.donnees(type_mouvement='SORTIE', quantite='50'))
+        self.assertContains(r, 'Stock insuffisant')
+        self.assertEqual(Stock.objects.get(produit=self.p_actif).quantite, Decimal('10'))
+
+    def test_quantite_zero_refusee_pour_une_entree(self):
+        self.client.force_login(self.gest_stock)
+        r = self.client.post(reverse('mouvement_creer'), self.donnees(quantite='0'))
+        self.assertContains(r, 'supérieure à 0')
+
+    def test_vendeur_voit_le_stock_mais_ne_peut_pas_ajouter_de_mouvement(self):
+        self.client.force_login(self.vendeur)
+        self.assertEqual(self.client.get(reverse('stock_liste')).status_code, 200)
+        self.assertEqual(self.client.post(reverse('mouvement_creer'), self.donnees()).status_code, 403)
+
+    def test_client_et_staff_sans_droit_refuses(self):
+        for u in (self.client_user, self.staff_sans_droit):
+            self.client.force_login(u)
+            self.assertEqual(self.client.get(reverse('stock_liste')).status_code, 403)
+            self.assertEqual(self.client.get(reverse('mouvement_liste')).status_code, 403)
+
+    def test_modifier_le_seuil_et_alerte(self):
+        stock = Stock.objects.get(produit=self.p_actif)
+        self.client.force_login(self.gest_stock)
+        self.client.post(reverse('stock_seuil', args=[stock.pk]), {'seuil_alerte': '12'})
+        stock.refresh_from_db()
+        self.assertEqual(stock.seuil_alerte, Decimal('12'))
+        self.assertTrue(stock.en_alerte)
+        r = self.client.get(reverse('stock_liste'), {'alerte': '1'})
+        self.assertContains(r, "Jus d&#x27;orange")
+
+    def test_vendeur_ne_peut_pas_changer_le_seuil(self):
+        stock = Stock.objects.get(produit=self.p_actif)
+        self.client.force_login(self.vendeur)
+        self.assertEqual(self.client.post(reverse('stock_seuil', args=[stock.pk]), {'seuil_alerte': '3'}).status_code, 403)

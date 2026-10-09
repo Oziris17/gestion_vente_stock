@@ -2,7 +2,7 @@ from django import forms
 from django.contrib.auth import get_user_model
 from django.contrib.auth.forms import AuthenticationForm, UserCreationForm
 
-from .models import Commande, CommandeFournisseur, Produits
+from .models import Commande, CommandeFournisseur, Magasin, MouvementStock, Produits, Stock
 
 User = get_user_model()
 
@@ -92,3 +92,34 @@ class StatutCommandeForm(BootstrapMixin, forms.ModelForm):
     class Meta:
         model = Commande
         fields = ['statut']
+
+    def clean_statut(self):
+        nouveau = self.cleaned_data['statut']
+        # Une commande annulée a déjà rendu son stock : on ne la réactive pas
+        # (il faudrait re-vérifier le stock). Il faut en créer une nouvelle.
+        if self.initial.get('statut') == Commande.Statut.ANNULEE and nouveau != Commande.Statut.ANNULEE:
+            raise forms.ValidationError("Une commande annulée ne peut pas être réactivée.")
+        return nouveau
+
+
+class MouvementStockForm(BootstrapMixin, forms.Form):
+    produit = forms.ModelChoiceField(queryset=Produits.objects.filter(actif=True).order_by('nom'))
+    magasin = forms.ModelChoiceField(queryset=Magasin.objects.filter(actif=True).order_by('nom'))
+    type_mouvement = forms.ChoiceField(label='Type de mouvement', choices=MouvementStock.Type.choices)
+    quantite = forms.DecimalField(
+        label='Quantité', max_digits=12, decimal_places=3, min_value=0,
+        help_text="Pour un ajustement (inventaire), saisissez la quantité réellement comptée.")
+    motif = forms.CharField(label='Motif (facultatif)', max_length=200, required=False)
+
+    def clean(self):
+        data = super().clean()
+        type_m, quantite = data.get('type_mouvement'), data.get('quantite')
+        if quantite is not None and type_m in (MouvementStock.Type.ENTREE, MouvementStock.Type.SORTIE) and quantite <= 0:
+            self.add_error('quantite', "La quantité doit être supérieure à 0.")
+        return data
+
+
+class SeuilStockForm(BootstrapMixin, forms.ModelForm):
+    class Meta:
+        model = Stock
+        fields = ['seuil_alerte']

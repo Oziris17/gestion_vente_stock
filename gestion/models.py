@@ -34,9 +34,18 @@ class Magasin(models.Model):
     nom = models.CharField(unique=True, max_length=150)
     adresse = models.TextField(blank=True, null=True)
     actif = models.BooleanField(default=True)
+    # Le magasin dont le stock est utilisé pour les commandes faites sur le site.
+    vente_en_ligne = models.BooleanField(
+        default=False,
+        help_text="Cochez pour le magasin dont le stock sert aux commandes du site (un seul possible).")
 
     class Meta:
         db_table = 'magasin'
+        constraints = [
+            # Règle appliquée par PostgreSQL lui-même : au plus UN magasin avec vente_en_ligne = vrai.
+            models.UniqueConstraint(fields=['vente_en_ligne'], condition=models.Q(vente_en_ligne=True),
+                                    name='un_seul_magasin_vente_en_ligne'),
+        ]
 
     def __str__(self):
         return self.nom
@@ -188,3 +197,62 @@ class LigneCommande(models.Model):
     @property
     def sous_total(self):
         return self.prix_unitaire * self.quantite
+
+
+# ---------------------------------------------------------------------------
+# STOCK : quantité actuelle par produit et par magasin + historique des mouvements
+# ---------------------------------------------------------------------------
+class Stock(models.Model):
+    produit = models.ForeignKey(Produits, on_delete=models.PROTECT, related_name='stocks')
+    magasin = models.ForeignKey(Magasin, on_delete=models.PROTECT, related_name='stocks')
+    quantite = models.DecimalField(max_digits=12, decimal_places=3, default=Decimal('0'))
+    seuil_alerte = models.DecimalField(
+        max_digits=12, decimal_places=3, default=Decimal('0'),
+        validators=[MinValueValidator(Decimal('0'))],
+        help_text="Une alerte s'affiche quand la quantité est inférieure ou égale à ce seuil.")
+
+    class Meta:
+        db_table = 'stock'
+        constraints = [
+            models.UniqueConstraint(fields=['produit', 'magasin'], name='un_stock_par_produit_et_magasin'),
+            # PostgreSQL refuse tout stock négatif, même si le code se trompait.
+            models.CheckConstraint(condition=models.Q(quantite__gte=0), name='stock_jamais_negatif'),
+        ]
+        ordering = ['produit__nom', 'magasin__nom']
+
+    def __str__(self):
+        return f"{self.produit} @ {self.magasin} : {self.quantite}"
+
+    @property
+    def en_alerte(self):
+        return self.quantite <= self.seuil_alerte
+
+
+class MouvementStock(models.Model):
+    """Journal des entrées, sorties et ajustements. On l'écrit, on ne le modifie jamais."""
+
+    class Type(models.TextChoices):
+        ENTREE = 'ENTREE', 'Entrée (réception, retour)'
+        SORTIE = 'SORTIE', 'Sortie (vente, casse, perte)'
+        AJUSTEMENT = 'AJUSTEMENT', 'Ajustement (inventaire)'
+
+    produit = models.ForeignKey(Produits, on_delete=models.PROTECT, related_name='mouvements')
+    magasin = models.ForeignKey(Magasin, on_delete=models.PROTECT, related_name='mouvements')
+    type_mouvement = models.CharField(max_length=12, choices=Type.choices)
+    # ENTREE/SORTIE : quantité déplacée. AJUSTEMENT : quantité réellement comptée.
+    quantite = models.DecimalField(max_digits=12, decimal_places=3, validators=[MinValueValidator(Decimal('0'))])
+    quantite_avant = models.DecimalField(max_digits=12, decimal_places=3)
+    quantite_apres = models.DecimalField(max_digits=12, decimal_places=3)
+    motif = models.CharField(max_length=200, blank=True)
+    commande_client = models.ForeignKey(Commande, null=True, blank=True, on_delete=models.SET_NULL,
+                                        related_name='mouvements_stock')
+    auteur = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL,
+                               related_name='mouvements_stock')
+    date_mouvement = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'mouvement_stock'
+        ordering = ['-date_mouvement', '-id']
+
+    def __str__(self):
+        return f"{self.get_type_mouvement_display()} {self.quantite} x {self.produit}"
