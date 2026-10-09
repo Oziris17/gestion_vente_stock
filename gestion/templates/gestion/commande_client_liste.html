@@ -1,0 +1,29 @@
+{% extends 'gestion/base.html' %}
+{% block title %}Commandes clients - Gestion{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h3 class="fw-bold mb-0">Commandes des clients</h3>
+  <a href="{% url 'tableau_de_bord' %}" class="btn btn-outline-secondary">Retour</a>
+</div>
+<div class="card card-custom p-3">
+  <div class="table-responsive">
+    <table class="table align-middle table-custom table-hover mb-0">
+      <thead><tr><th>N°</th><th>Client</th><th>Date</th><th>Détail</th><th>Total</th><th>Statut</th><th></th></tr></thead>
+      <tbody>
+      {% for c in commandes %}
+        <tr>
+          <td>#{{ c.pk }}</td><td>{{ c.client.username }}</td><td>{{ c.date_commande|date:"d/m/Y H:i" }}</td>
+          <td>{% for l in c.lignes.all %}{{ l.quantite }} × {{ l.produit.nom }}{% if not forloop.last %}, {% endif %}{% endfor %}</td>
+          <td>{{ c.total|floatformat:"0g" }} FCFA</td>
+          <td><span class="badge bg-info bg-opacity-10 text-info">{{ c.get_statut_display }}</span></td>
+          <td>{% if perms.gestion.change_commande %}<a href="{% url 'commande_client_statut' c.pk %}">Changer le statut</a>{% endif %}</td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="7" class="text-center text-muted py-4">Aucune commande.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% include 'gestion/_pagination.html' %}
+{% endblock %}

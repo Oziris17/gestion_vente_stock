@@ -1,0 +1,40 @@
+{% extends 'gestion/base.html' %}
+{% block title %}Catalogue - Mon Magasin{% endblock %}
+{% block content %}
+<h3 class="fw-bold mb-3">Nos produits</h3>
+
+<form method="get" class="row g-2 mb-4">
+  <div class="col-md-6">
+    <input type="search" name="q" value="{{ recherche }}" class="form-control" placeholder="Rechercher un produit...">
+  </div>
+  <div class="col-md-4">
+    <select name="categorie" class="form-select">
+      <option value="">Toutes les catégories</option>
+      {% for c in categories %}
+        <option value="{{ c.id }}" {% if categorie_id == c.id|stringformat:"s" %}selected{% endif %}>{{ c.nom }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="col-md-2 d-grid"><button class="btn btn-primary-custom btn-primary">Filtrer</button></div>
+</form>
+
+<div class="row g-3">
+  {% for p in produits %}
+    <div class="col-sm-6 col-lg-4">
+      <div class="card card-custom h-100 p-3">
+        <span class="badge bg-secondary bg-opacity-10 text-secondary align-self-start mb-2">{{ p.categorie.nom }}</span>
+        <h5 class="fw-bold">{{ p.nom }}</h5>
+        <p class="fs-5 text-primary fw-semibold mb-3">{{ p.prix_vente|floatformat:"0g" }} FCFA</p>
+        <div class="mt-auto">
+          {# Un visiteur non connecté est envoyé vers la connexion, puis revient sur la commande #}
+          <a class="btn btn-primary-custom btn-primary w-100" href="{% url 'passer_commande' p.id %}">
+            <i class="bi bi-cart-plus me-1"></i>Commander
+          </a>
+        </div>
+      </div>
+    </div>
+  {% empty %}
+    <p class="text-muted">Aucun produit trouvé.</p>
+  {% endfor %}
+</div>
+{% endblock %}

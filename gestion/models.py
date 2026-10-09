@@ -1,3 +1,7 @@
+from decimal import Decimal
+
+from django.conf import settings
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 
 class Categorie(models.Model):
@@ -44,12 +48,12 @@ class Produits(models.Model):
     nom = models.CharField(max_length=150)
     description = models.TextField(blank=True, null=True)
     code_barres = models.CharField(unique=True, max_length=50, blank=True, null=True)
-    prix_achat = models.DecimalField(max_digits=12, decimal_places=2)
-    prix_vente = models.DecimalField(max_digits=12, decimal_places=2)
-    categorie = models.ForeignKey(Categorie, on_delete=models.CASCADE)
+    prix_achat = models.DecimalField(max_digits=12, decimal_places=2, validators=[MinValueValidator(Decimal('0'))])
+    prix_vente = models.DecimalField(max_digits=12, decimal_places=2, validators=[MinValueValidator(Decimal('0'))])
+    categorie = models.ForeignKey(Categorie, on_delete=models.PROTECT)
     marque = models.ForeignKey(Marque, on_delete=models.SET_NULL, blank=True, null=True)
     unite_mesure = models.CharField(max_length=10)
-    taux_tva = models.DecimalField(max_digits=5, decimal_places=2)
+    taux_tva = models.DecimalField(max_digits=5, decimal_places=2, validators=[MinValueValidator(Decimal('0')), MaxValueValidator(Decimal('100'))])
     actif = models.BooleanField(default=True)
 
     class Meta:
@@ -77,10 +81,18 @@ class Fournisseur(models.Model):
 class CommandeFournisseur(models.Model):
     id = models.BigAutoField(primary_key=True)
     numero_commande = models.CharField(unique=True, max_length=50)
-    fournisseur = models.ForeignKey(Fournisseur, on_delete=models.CASCADE)
-    magasin = models.ForeignKey(Magasin, on_delete=models.CASCADE)
+    fournisseur = models.ForeignKey(Fournisseur, on_delete=models.PROTECT)
+    magasin = models.ForeignKey(Magasin, on_delete=models.PROTECT)
     date_commande = models.DateTimeField(auto_now_add=True)
-    statut = models.CharField(max_length=30)
+
+    class Statut(models.TextChoices):
+        BROUILLON = 'BROUILLON', 'Brouillon'
+        ENVOYEE = 'ENVOYEE', 'Envoyée au fournisseur'
+        RECUE_PARTIELLEMENT = 'RECUE_PARTIELLEMENT', 'Reçue partiellement'
+        RECUE = 'RECUE', 'Reçue'
+        ANNULEE = 'ANNULEE', 'Annulée'
+
+    statut = models.CharField(max_length=30, choices=Statut.choices, default=Statut.BROUILLON)
     remarque = models.TextField(blank=True, null=True)
     cree_par = models.CharField(max_length=100)
 
@@ -94,7 +106,7 @@ class CommandeFournisseur(models.Model):
 class LigneCommandeFournisseur(models.Model):
     id = models.BigAutoField(primary_key=True)
     commande = models.ForeignKey(CommandeFournisseur, on_delete=models.CASCADE)
-    produit = models.ForeignKey(Produits, on_delete=models.CASCADE)
+    produit = models.ForeignKey(Produits, on_delete=models.PROTECT)
     quantite_commandee = models.DecimalField(max_digits=12, decimal_places=3)
     prix_achat_unitaire = models.DecimalField(max_digits=12, decimal_places=2)
 
@@ -132,3 +144,47 @@ class LigneLivraison(models.Model):
     class Meta:
         db_table = 'ligne_livraison'
         unique_together = (('livraison', 'ligne_commande'),)
+
+
+# ---------------------------------------------------------------------------
+# Commandes passées par les CLIENTS du site (différentes des commandes fournisseur)
+# ---------------------------------------------------------------------------
+class Commande(models.Model):
+    class Statut(models.TextChoices):
+        EN_ATTENTE = 'EN_ATTENTE', 'En attente'
+        CONFIRMEE = 'CONFIRMEE', 'Confirmée'
+        LIVREE = 'LIVREE', 'Livrée'
+        ANNULEE = 'ANNULEE', 'Annulée'
+
+    # settings.AUTH_USER_MODEL = le modèle utilisateur de Django (table auth_user).
+    # PROTECT : on ne peut pas supprimer un client qui a des commandes.
+    client = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='commandes')
+    date_commande = models.DateTimeField(auto_now_add=True)
+    statut = models.CharField(max_length=20, choices=Statut.choices, default=Statut.EN_ATTENTE)
+
+    class Meta:
+        db_table = 'commande_client'
+        ordering = ['-date_commande']
+
+    def __str__(self):
+        return f"Commande #{self.pk} - {self.client}"
+
+    @property
+    def total(self):
+        return sum((ligne.sous_total for ligne in self.lignes.all()), Decimal('0'))
+
+
+class LigneCommande(models.Model):
+    commande = models.ForeignKey(Commande, on_delete=models.CASCADE, related_name='lignes')
+    produit = models.ForeignKey(Produits, on_delete=models.PROTECT)
+    quantite = models.PositiveIntegerField(validators=[MinValueValidator(1)])
+    # Prix "figé" au moment de l'achat : si le prix du produit change plus tard,
+    # les anciennes commandes gardent le prix payé.
+    prix_unitaire = models.DecimalField(max_digits=12, decimal_places=2)
+
+    class Meta:
+        db_table = 'ligne_commande_client'
+
+    @property
+    def sous_total(self):
+        return self.prix_unitaire * self.quantite

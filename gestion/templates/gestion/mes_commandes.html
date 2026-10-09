@@ -1,0 +1,21 @@
+{% extends 'gestion/base.html' %}
+{% block title %}Mes commandes{% endblock %}
+{% block content %}
+<h3 class="fw-bold mb-3">Mes commandes</h3>
+{% for c in commandes %}
+  <div class="card card-custom p-3 mb-3">
+    <div class="d-flex justify-content-between">
+      <strong>Commande #{{ c.pk }} — {{ c.date_commande|date:"d/m/Y H:i" }}</strong>
+      <span class="badge bg-info bg-opacity-10 text-info">{{ c.get_statut_display }}</span>
+    </div>
+    <ul class="mb-1 mt-2">
+      {% for l in c.lignes.all %}
+        <li>{{ l.quantite }} × {{ l.produit.nom }} — {{ l.sous_total|floatformat:"0g" }} FCFA</li>
+      {% endfor %}
+    </ul>
+    <div class="text-end fw-semibold">Total : {{ c.total|floatformat:"0g" }} FCFA</div>
+  </div>
+{% empty %}
+  <p class="text-muted">Vous n'avez pas encore passé de commande. <a href="{% url 'accueil' %}">Voir le catalogue</a></p>
+{% endfor %}
+{% endblock %}

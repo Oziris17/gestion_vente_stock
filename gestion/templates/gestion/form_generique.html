@@ -1,0 +1,19 @@
+{% extends 'gestion/base.html' %}
+{% block title %}{{ titre }}{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-md-8 col-lg-6">
+    <div class="card card-custom p-4 shadow-sm">
+      <h4 class="fw-bold mb-4">{{ titre }}</h4>
+      <form method="post">
+        {% csrf_token %}
+        {% include 'gestion/_champs.html' %}
+        <div class="d-flex gap-2 mt-4">
+          <button type="submit" class="btn btn-primary-custom btn-primary flex-fill">Enregistrer</button>
+          <a href="{{ retour }}" class="btn btn-outline-secondary">Annuler</a>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

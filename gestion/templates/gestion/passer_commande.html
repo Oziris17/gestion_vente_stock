@@ -1,0 +1,20 @@
+{% extends 'gestion/base.html' %}
+{% block title %}Commander {{ produit.nom }}{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-md-7 col-lg-5">
+    <div class="card card-custom p-4 shadow-sm">
+      <h4 class="fw-bold">{{ produit.nom }}</h4>
+      <p class="fs-5 text-primary fw-semibold">{{ produit.prix_vente|floatformat:"0g" }} FCFA <span class="text-muted fs-6">/ {{ produit.unite_mesure }}</span></p>
+      <form method="post">
+        {% csrf_token %}
+        {% include 'gestion/_champs.html' %}
+        <div class="d-flex gap-2 mt-4">
+          <button type="submit" class="btn btn-primary-custom btn-primary flex-fill">Confirmer la commande</button>
+          <a href="{% url 'accueil' %}" class="btn btn-outline-secondary">Annuler</a>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}
