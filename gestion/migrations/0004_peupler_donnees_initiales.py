@@ -1,4 +1,3 @@
-oui
 from django.db import migrations
 from decimal import Decimal
 from datetime import timedelta
