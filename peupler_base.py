@@ -176,10 +176,10 @@ def enregistrer_mouvement(produit, magasin, type_mvt, quantite, motif):
 # ---------------------------------------------------------------------------
 @transaction.atomic
 def peupler():
-    # 1) Catégories. get_or_create : retrouve l'élément s'il existe, sinon le crée.
+    # 1) Catégories. update_or_create : retrouve l'élément s'il existe, sinon le crée.
     categories = {}
     for nom, description in CATEGORIES.items():
-        categories[nom], _ = Categorie.objects.get_or_create(
+        categories[nom], _ = Categorie.objects.update_or_create(
             nom=nom, defaults={'description': description})
 
     # 2) Marques
@@ -190,7 +190,7 @@ def peupler():
     # 3) Magasins
     magasins = []
     for code, nom, adresse, en_ligne in MAGASINS:
-        magasin, _ = Magasin.objects.get_or_create(
+        magasin, _ = Magasin.objects.update_or_create(
             code_magasin=code,
             defaults={'nom': nom, 'adresse': adresse, 'vente_en_ligne': en_ligne})
         magasins.append(magasin)
@@ -209,7 +209,7 @@ def peupler():
     # 5) Produits (le code-barres fictif est fabriqué à partir du numéro d'ordre)
     produits = {}
     for i, (code, nom, cat, marque, unite, achat, vente, _q, _s) in enumerate(PRODUITS, start=1):
-        produits[code], _ = Produits.objects.get_or_create(
+        produits[code], _ = Produits.objects.update_or_create(
             code_produit=code,
             defaults={
                 'nom': nom,
@@ -240,7 +240,7 @@ def peupler():
             enregistrer_mouvement(produits[code], principal, type_mvt, quantite, motif)
 
     # 7) Commande fournisseur n°1 : reçue en entier, avec sa livraison
-    cmd1, _ = CommandeFournisseur.objects.get_or_create(
+    cmd1, _ = CommandeFournisseur.objects.update_or_create(
         numero_commande='CF-2026-001',
         defaults={'fournisseur': fournisseur_de['Alimentaire'], 'magasin': principal,
                   'statut': CommandeFournisseur.Statut.RECUE, 'cree_par': 'script_de_test'})
