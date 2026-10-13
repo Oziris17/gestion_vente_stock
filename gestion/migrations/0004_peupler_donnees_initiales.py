@@ -1,3 +1,4 @@
+oui
 from django.db import migrations
 from decimal import Decimal
 from datetime import timedelta
@@ -128,9 +129,9 @@ def peupler_donnees(apps, schema_editor):
             for mag, q in ((principal, qte), (secondaire, qte // 2)):
                 Stock.objects.create(produit=prod, magasin=mag, quantite=D(q), seuil_alerte=D(seuil))
 
-class Migration(migrations.dependencies):
+class Migration(migrations.Migration):
     dependencies = [
-        ('gestion', '0001_initial'),  # Remplacez 0001_initial par le nom de votre migration précédente si nécessaire
+        ('gestion', '0004_peupler_donnees_initiales'),  # Remplacez 0001_initial par le nom de votre migration précédente si nécessaire
     ]
 
     operations = [
