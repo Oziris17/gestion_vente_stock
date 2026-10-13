@@ -122,11 +122,24 @@ def peupler_donnees(apps, schema_editor):
             }
         )
 
-    if not Stock.objects.exists():
-        for code, _n, _c, _m, _u, _a, _v, qte, seuil in PRODUITS:
-            prod = produits[code]
-            for mag, q in ((principal, qte), (secondaire, qte // 2)):
-                Stock.objects.create(produit=prod, magasin=mag, quantite=D(q), seuil_alerte=D(seuil))
+    for i, (code, nom, cat, marque, unite, achat, vente, qte_init, seuil) in enumerate(PRODUITS, start=1):
+        prod, created = Produits.objects.get_or_create(
+            code_produit=code,
+            defaults={
+                'nom': nom, 'code_barres': f'600{i:010d}',
+                'prix_achat': D(achat), 'prix_vente': D(vente),
+                'categorie': categories[cat], 'marque': marques[marque] if marque else None,
+                'unite_mesure': unite, 'taux_tva': TVA,
+            }
+        )
+        produits[code] = prod
+        
+        for mag, qte in ((principal, qte_init), (secondaire, qte_init // 2)):
+            Stock.objects.get_or_create(
+                produit=prod, magasin=mag,
+                defaults={'quantite': D(qte), 'seuil_alerte': D(seuil)}
+            )
+
 
 class Migration(migrations.Migration):
     dependencies = [
