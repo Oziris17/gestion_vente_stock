@@ -1,0 +1,39 @@
+{# Version "boutique" de _champs.html : même rôle (afficher tous les champs d'un formulaire), style sombre. #}
+{# L'ancien _champs.html reste inchangé car la partie Gestion (Bootstrap) l'utilise encore. #}
+<style>
+  /* Tailwind retire l'apparence native des champs : on la redonne ici, avec les couleurs du thème */
+  .champ-boutique input:not([type=checkbox]):not([type=radio]),
+  .champ-boutique select,
+  .champ-boutique textarea {
+    width: 100%; min-height: 2.75rem; padding: 0 .75rem; border-radius: .5rem;
+    background: #1c1b1b; border: 1px solid #2a2a2a; color: #e5e2e1;
+  }
+  .champ-boutique textarea { padding: .5rem .75rem; min-height: 6rem; }
+  .champ-boutique input:focus, .champ-boutique select:focus, .champ-boutique textarea:focus {
+    outline: none; border-color: #d98e32;
+  }
+  .aide-champ ul { list-style: disc; padding-left: 1.1rem; }
+</style>
+
+{% if form.non_field_errors %}
+  <div role="alert" class="mb-space-md rounded-lg border border-error/40 bg-error-container/30 px-4 py-3 font-body-sm text-body-sm text-error">
+    {% for erreur in form.non_field_errors %}<p>{{ erreur }}</p>{% endfor %}
+  </div>
+{% endif %}
+
+{% for field in form %}
+  {% if field.is_hidden %}
+    {{ field }}
+  {% else %}
+    <div class="champ-boutique mb-space-md space-y-1">
+      <label for="{{ field.id_for_label }}" class="block font-label-lg text-label-lg text-on-surface">{{ field.label }}</label>
+      {{ field }}
+      {% if field.help_text %}
+        <div class="aide-champ font-body-sm text-body-sm text-on-surface-variant/80">{{ field.help_text|safe }}</div>
+      {% endif %}
+      {% for erreur in field.errors %}
+        <p class="font-body-sm text-body-sm text-error">{{ erreur }}</p>
+      {% endfor %}
+    </div>
+  {% endif %}
+{% endfor %}

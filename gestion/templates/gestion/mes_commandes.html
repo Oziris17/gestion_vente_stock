@@ -1,21 +1,40 @@
-{% extends 'gestion/base.html' %}
-{% block title %}Mes commandes{% endblock %}
+{% extends 'gestion/base_boutique.html' %}
+{% block title %}Mes commandes - Mon Magasin{% endblock %}
 {% block content %}
-<h3 class="fw-bold mb-3">Mes commandes</h3>
-{% for c in commandes %}
-  <div class="card card-custom p-3 mb-3">
-    <div class="d-flex justify-content-between">
-      <strong>Commande #{{ c.pk }} — {{ c.date_commande|date:"d/m/Y H:i" }}</strong>
-      <span class="badge bg-info bg-opacity-10 text-info">{{ c.get_statut_display }}</span>
-    </div>
-    <ul class="mb-1 mt-2">
-      {% for l in c.lignes.all %}
-        <li>{{ l.quantite }} × {{ l.produit.nom }} — {{ l.sous_total|floatformat:"0g" }} FCFA</li>
-      {% endfor %}
-    </ul>
-    <div class="text-end fw-semibold">Total : {{ c.total|floatformat:"0g" }} FCFA</div>
+<div class="max-w-[1440px] mx-auto px-margin md:px-margin-tablet lg:px-margin-desktop py-space-xl">
+  <h1 class="text-headline-lg-mobile md:text-headline-lg font-headline-lg-mobile md:font-headline-lg text-on-surface tracking-tight mb-space-lg">Mes commandes</h1>
+
+  <div class="space-y-space-md max-w-3xl">
+    {% for c in commandes %}
+      <article class="rounded-lg bg-surface-container p-space-md space-y-space-sm">
+        <div class="flex flex-wrap items-center justify-between gap-space-sm">
+          <h2 class="font-label-lg text-label-lg text-on-surface">Commande #{{ c.pk }} <span class="text-on-surface-variant font-normal">— {{ c.date_commande|date:"d/m/Y H:i" }}</span></h2>
+          {# Le statut change de couleur : annulée en rouge, confirmée ou livrée en ambre, sinon neutre #}
+          <span class="px-3 py-1 rounded-lg bg-surface-container-high font-label-md text-label-md
+                       {% if c.statut == 'ANNULEE' %}text-error{% elif c.statut == 'CONFIRMEE' or c.statut == 'LIVREE' %}text-primary-container{% else %}text-on-surface-variant{% endif %}">{{ c.get_statut_display }}</span>
+        </div>
+
+        <ul class="divide-y divide-surface-container-high">
+          {% for l in c.lignes.all %}
+            <li class="flex items-center justify-between gap-space-md py-2 font-body-sm text-body-sm">
+              <span class="text-on-surface">{{ l.quantite }} × {{ l.produit.nom }}</span>
+              <span class="text-on-surface-variant whitespace-nowrap">{{ l.sous_total|floatformat:"0g" }} FCFA</span>
+            </li>
+          {% endfor %}
+        </ul>
+
+        <div class="flex items-center justify-between border-t border-surface-container-high pt-space-sm">
+          <span class="font-label-lg text-label-lg text-on-surface">Total</span>
+          <span class="font-price-card text-price-card text-primary-container">{{ c.total|floatformat:"0g" }} FCFA</span>
+        </div>
+      </article>
+    {% empty %}
+      <div class="text-center py-space-xxl space-y-space-md">
+        <span class="material-symbols-outlined text-[56px] text-on-surface-variant/40">receipt_long</span>
+        <p class="font-headline-sm text-headline-sm text-on-surface">Vous n'avez pas encore passé de commande.</p>
+        <a href="{% url 'accueil' %}" class="inline-flex items-center px-space-lg h-12 rounded-lg bg-primary-container hover:bg-on-primary-fixed-variant text-on-primary font-label-lg text-label-lg transition-colors">Voir le catalogue</a>
+      </div>
+    {% endfor %}
   </div>
-{% empty %}
-  <p class="text-muted">Vous n'avez pas encore passé de commande. <a href="{% url 'accueil' %}">Voir le catalogue</a></p>
-{% endfor %}
+</div>
 {% endblock %}

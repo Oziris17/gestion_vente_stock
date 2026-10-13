@@ -22,4 +22,9 @@ urlpatterns = [
     path('gestion/stock/mouvements/', views.MouvementListe.as_view(), name='mouvement_liste'),
     path('gestion/commandes-clients/', views.CommandeClientListe.as_view(), name='commande_client_liste'),
     path('gestion/commandes-clients/<int:pk>/statut/', views.CommandeClientStatut.as_view(), name='commande_client_statut'),
+    path('panier/', views.voir_panier, name='panier'),
+    path('panier/ajouter/<int:produit_id>/', views.ajouter_au_panier, name='ajouter_au_panier'),
+    path('panier/valider/', views.valider_panier, name='valider_panier'),
+    path('panier/modifier/<int:produit_id>/', views.modifier_panier, name='modifier_panier'),
+    path('panier/retirer/<int:produit_id>/', views.retirer_du_panier, name='retirer_du_panier'),
 ]

@@ -1,25 +1,28 @@
-{% extends 'gestion/base.html' %}
-{% block title %}Connexion{% endblock %}
+{% extends 'gestion/base_boutique.html' %}
+{% block title %}Connexion - Mon Magasin{% endblock %}
 {% block content %}
-<div class="row justify-content-center">
-  <div class="col-md-6 col-lg-4">
-    <div class="card card-custom p-4 shadow">
-      <div class="text-center mb-4">
-        <h4 class="fw-bold">{% if staff %}Espace gestion{% else %}Connexion{% endif %}</h4>
-        <p class="text-muted small">
-          {% if staff %}Réservé au personnel du magasin.{% else %}Connectez-vous pour passer commande.{% endif %}
-        </p>
-      </div>
-      <form method="post">
-        {% csrf_token %}
-        <input type="hidden" name="next" value="{{ next }}">
-        {% include 'gestion/_champs.html' %}
-        <button type="submit" class="btn btn-primary-custom btn-primary w-100 mt-4">Se connecter</button>
-      </form>
-      {% if not staff %}
-        <p class="text-center small mt-3 mb-0">Pas encore de compte ? <a href="{% url 'inscription' %}">Créer un compte</a></p>
-      {% endif %}
+<div class="max-w-md mx-auto px-margin py-space-xl md:py-space-xxl">
+  <div class="rounded-xl bg-surface-container p-space-lg space-y-space-md">
+    <div class="space-y-1">
+      <h1 class="font-headline-md text-headline-md text-on-surface tracking-tight">{% if staff %}Espace gestion{% else %}Connexion{% endif %}</h1>
+      <p class="font-body-sm text-body-sm text-on-surface-variant">
+        {% if staff %}Réservé au personnel du magasin.{% else %}Connectez-vous pour passer commande.{% endif %}
+      </p>
     </div>
+
+    <form method="post">
+      {% csrf_token %}
+      <input type="hidden" name="next" value="{{ next }}">
+      {% include 'gestion/_champs_boutique.html' %}
+      <button type="submit" class="w-full h-12 rounded-lg bg-primary-container hover:bg-on-primary-fixed-variant text-on-primary font-label-lg text-label-lg transition-colors">Se connecter</button>
+    </form>
+
+    {% if not staff %}
+      <p class="text-center font-body-sm text-body-sm text-on-surface-variant">
+        Pas encore de compte ?
+        <a href="{% url 'inscription' %}" class="text-primary-container hover:underline">Créer un compte</a>
+      </p>
+    {% endif %}
   </div>
 </div>
 {% endblock %}

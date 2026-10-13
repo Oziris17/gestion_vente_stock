@@ -8,6 +8,10 @@ from django.db.models import F, Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse, reverse_lazy
 from django.views.generic import CreateView, FormView, ListView, TemplateView, UpdateView
+from django.contrib import messages
+from django.contrib.auth.decorators import login_required
+from django.db import transaction
+from .models import Commande, LigneCommande, Magasin, Stock, MouvementStock
 
 from .forms import (
     CommandeFournisseurForm, InscriptionClientForm, LigneCommandeForm, MouvementStockForm,
@@ -22,6 +26,16 @@ from .stock import StockInsuffisant, enregistrer_mouvement, magasin_vente_en_lig
 # ===========================================================================
 # PARTIE PUBLIQUE / CLIENTS
 # ===========================================================================
+ICONES_RAYONS = {
+    'Alimentaire': 'restaurant',
+    'Boissons': 'local_drink',
+    'Hygiène et beauté': 'soap',
+    'Entretien maison': 'cleaning_services',
+    'Vêtements': 'checkroom',
+    'Chaussures': 'directions_walk',
+    'Électroménager': 'kitchen',
+    'Électronique': 'devices',
+}
 def accueil(request):
     """Catalogue visible par TOUT LE MONDE : seulement le nom, la catégorie et le prix de vente."""
     produits = Produits.objects.filter(actif=True).select_related('categorie')
@@ -36,13 +50,14 @@ def accueil(request):
 
     # Disponibilité publique = seulement "en stock / rupture" (jamais les quantités exactes),
     # calculée sur le magasin de vente en ligne.
-    produits = list(produits.order_by('nom'))
+    produits = list(produits.order_by('categorie__nom', 'nom'))
     magasin = magasin_vente_en_ligne()
     dispo = {}
     if magasin:
         dispo = dict(Stock.objects.filter(magasin=magasin).values_list('produit_id', 'quantite'))
     for p in produits:
         p.disponible = dispo.get(p.id, 0) > 0
+        p.icone = ICONES_RAYONS.get(p.categorie.nom, 'inventory_2')
 
     return render(request, 'gestion/accueil.html', {
         'produits': produits,
@@ -302,3 +317,84 @@ class MouvementListe(GestionMixin, ListView):
     context_object_name = 'mouvements'
     queryset = MouvementStock.objects.select_related('produit', 'magasin', 'auteur')
     paginate_by = 25
+
+from django.shortcuts import get_object_or_404, redirect, render
+from .models import Produits
+
+def ajouter_au_panier(request, produit_id):
+    produit = get_object_or_404(Produits, id=produit_id, actif=True)
+    panier = request.session.get('panier', {})
+    cle = str(produit.id)
+    panier[cle] = panier.get(cle, 0) + 1
+    request.session['panier'] = panier
+    return redirect('panier')
+
+def voir_panier(request):
+    panier = request.session.get('panier', {})
+    lignes, total = [], 0
+    for cle, quantite in panier.items():
+        produit = get_object_or_404(Produits, id=int(cle))
+        sous_total = produit.prix_vente * quantite
+        total += sous_total
+        lignes.append({'produit': produit, 'quantite': quantite,
+                       'sous_total': sous_total})
+    return render(request, 'gestion/panier.html',
+                  {'lignes': lignes, 'total': total})
+@login_required
+def valider_panier(request):
+    if request.method != 'POST':
+        return redirect('panier')
+
+    panier = request.session.get('panier', {})
+    if not panier:
+        messages.error(request, "Votre panier est vide.")
+        return redirect('panier')
+
+    magasin = magasin_vente_en_ligne()
+    if magasin is None:
+        messages.error(request, "Les commandes sont momentanément indisponibles.")
+        return redirect('panier')
+
+    try:
+        with transaction.atomic():
+            commande = Commande.objects.create(client=request.user)
+            for cle, quantite in panier.items():
+                produit = get_object_or_404(Produits, pk=int(cle), actif=True)
+                LigneCommande.objects.create(
+                    commande=commande, produit=produit,
+                    quantite=quantite, prix_unitaire=produit.prix_vente)
+                enregistrer_mouvement(
+                    produit=produit, magasin=magasin,
+                    type_mouvement=MouvementStock.Type.SORTIE,
+                    quantite=quantite, auteur=request.user,
+                    motif=f'Commande client #{commande.pk}',
+                    commande_client=commande)
+    except StockInsuffisant as erreur:
+        messages.error(request, str(erreur))
+        return redirect('panier')
+
+    del request.session['panier']
+    messages.success(request, f'Commande #{commande.pk} enregistrée.')
+    return redirect('mes_commandes')
+def modifier_panier(request, produit_id):
+    if request.method == 'POST':
+        panier = request.session.get('panier', {})
+        cle = str(produit_id)
+        try:
+            quantite = int(request.POST.get('quantite', 1))
+        except ValueError:
+            quantite = 1
+        if cle in panier:
+            if quantite > 0:
+                panier[cle] = quantite
+            else:
+                del panier[cle]
+            request.session['panier'] = panier
+    return redirect('panier')
+
+def retirer_du_panier(request, produit_id):
+    if request.method == 'POST':
+        panier = request.session.get('panier', {})
+        panier.pop(str(produit_id), None)
+        request.session['panier'] = panier
+    return redirect('panier')                  

@@ -1,44 +1,156 @@
-{% extends 'gestion/base.html' %}
+{% extends 'gestion/base_boutique.html' %}
 {% block title %}Catalogue - Mon Magasin{% endblock %}
 {% block content %}
-<h3 class="fw-bold mb-3">Nos produits</h3>
 
-<form method="get" class="row g-2 mb-4">
-  <div class="col-md-6">
-    <input type="search" name="q" value="{{ recherche }}" class="form-control" placeholder="Rechercher un produit...">
-  </div>
-  <div class="col-md-4">
-    <select name="categorie" class="form-select">
-      <option value="">Toutes les catégories</option>
-      {% for c in categories %}
-        <option value="{{ c.id }}" {% if categorie_id == c.id|stringformat:"s" %}selected{% endif %}>{{ c.nom }}</option>
-      {% endfor %}
-    </select>
-  </div>
-  <div class="col-md-2 d-grid"><button class="btn btn-primary-custom btn-primary">Filtrer</button></div>
-</form>
-
-<div class="row g-3">
-  {% for p in produits %}
-    <div class="col-sm-6 col-lg-4">
-      <div class="card card-custom h-100 p-3">
-        <span class="badge bg-secondary bg-opacity-10 text-secondary align-self-start mb-2">{{ p.categorie.nom }}</span>
-        <h5 class="fw-bold">{{ p.nom }}</h5>
-        <p class="fs-5 text-primary fw-semibold mb-3">{{ p.prix_vente|floatformat:"0g" }} FCFA</p>
-        <div class="mt-auto">
-          {% if p.disponible %}
-            {# Un visiteur non connecté est envoyé vers la connexion, puis revient sur la commande #}
-            <a class="btn btn-primary-custom btn-primary w-100" href="{% url 'passer_commande' p.id %}">
-              <i class="bi bi-cart-plus me-1"></i>Commander
-            </a>
-          {% else %}
-            <button class="btn btn-secondary w-100" disabled>Rupture de stock</button>
-          {% endif %}
-        </div>
+{# La bannière n'apparaît que sur l'accueil « normal », pas pendant une recherche ou un filtre #}
+{% if not recherche and not categorie_id %}
+<section class="relative w-full bg-surface-container-lowest overflow-hidden">
+  <div class="absolute inset-0 bg-gradient-to-r from-surface-container-lowest to-surface-container-low pointer-events-none"></div>
+  <div class="relative max-w-[1440px] mx-auto px-margin md:px-margin-tablet lg:px-margin-desktop py-space-xl lg:py-space-xxl">
+    <div class="max-w-2xl space-y-space-md">
+      <div class="flex items-center gap-space-sm text-on-surface-variant">
+        <span class="w-1.5 h-1.5 rounded-full bg-primary-container"></span>
+        <span class="font-label-md text-label-md uppercase tracking-[0.2em]">Mon Magasin • Douala</span>
+      </div>
+      <h1 class="text-display-hero-mobile md:text-display-hero font-display-hero-mobile md:font-display-hero text-on-surface tracking-tight">
+        Tout votre quotidien, au même endroit.
+      </h1>
+      <p class="font-body-lg text-body-lg text-on-surface-variant max-w-xl leading-relaxed">
+        Parcourez le catalogue, ajoutez vos produits au panier et passez commande depuis votre compte.
+      </p>
+      <div class="pt-space-sm">
+        <a href="#catalogue" class="inline-flex items-center justify-center px-space-lg h-12 rounded-lg bg-primary-container hover:bg-on-primary-fixed-variant text-on-primary font-label-lg text-label-lg transition-colors duration-200">
+          Découvrir les produits
+          <span class="material-symbols-outlined ml-2 text-[18px]">arrow_forward</span>
+        </a>
       </div>
     </div>
-  {% empty %}
-    <p class="text-muted">Aucun produit trouvé.</p>
+  </div>
+</section>
+{% endif %}
+
+<!-- Barre des catégories : chaque pastille envoie ?categorie=<id> à la vue accueil -->
+<section class="w-full bg-surface-container-low" id="catalogue">
+  <div class="max-w-[1440px] mx-auto px-margin md:px-margin-tablet lg:px-margin-desktop py-space-md">
+    <div class="flex items-center gap-space-xs sm:gap-space-sm overflow-x-auto no-scrollbar py-1">
+      <a href="{% url 'accueil' %}"
+         class="flex-shrink-0 px-4 py-2 rounded-lg font-label-md text-label-md transition-colors {% if not categorie_id %}bg-surface-container-highest text-on-surface{% else %}bg-surface-container text-on-surface-variant hover:text-on-surface{% endif %}">Tous les rayons</a>
+      {% for c in categories %}
+        <a href="{% url 'accueil' %}?categorie={{ c.id }}"
+           class="flex-shrink-0 px-4 py-2 rounded-lg font-label-md text-label-md transition-colors {% if categorie_id == c.id|stringformat:'s' %}bg-surface-container-highest text-on-surface{% else %}bg-surface-container text-on-surface-variant hover:text-on-surface{% endif %}">{{ c.nom }}</a>
+      {% endfor %}
+    </div>
+  </div>
+</section>
+
+<div class="max-w-[1440px] mx-auto w-full px-margin md:px-margin-tablet lg:px-margin-desktop py-space-xl space-y-space-xxl">
+
+  {% if recherche %}
+    <p class="font-body-md text-body-md text-on-surface-variant">
+      Résultats pour « <span class="text-on-surface font-semibold">{{ recherche }}</span> » :
+      {{ produits|length }} produit{{ produits|length|pluralize }}.
+    </p>
+  {% endif %}
+
+  {# regroup : range la liste de produits par catégorie. Elle doit être triée par catégorie dans la vue. #}
+  {% regroup produits by categorie as rayons %}
+  {% for rayon in rayons %}
+  <section class="space-y-space-md">
+    <div class="flex items-end justify-between">
+      <div>
+        <span class="font-label-md text-label-md text-on-surface-variant uppercase tracking-widest">Rayon {{ forloop.counter|stringformat:"02d" }} • {{ rayon.list|length }} produit{{ rayon.list|length|pluralize }}</span>
+        <h2 class="font-headline-md text-headline-md text-on-surface tracking-tight">{{ rayon.grouper.nom }}</h2>
+      </div>
+      <div class="flex items-center gap-space-xs">
+        <button type="button" aria-label="Précédent" onclick="scrollRow('rail-{{ rayon.grouper.id }}', -1)"
+                class="w-9 h-9 rounded-lg bg-surface-container hover:bg-surface-container-highest text-on-surface-variant hover:text-on-surface flex items-center justify-center transition-colors">
+          <span class="material-symbols-outlined text-[20px]">chevron_left</span>
+        </button>
+        <button type="button" aria-label="Suivant" onclick="scrollRow('rail-{{ rayon.grouper.id }}', 1)"
+                class="w-9 h-9 rounded-lg bg-surface-container hover:bg-surface-container-highest text-on-surface-variant hover:text-on-surface flex items-center justify-center transition-colors">
+          <span class="material-symbols-outlined text-[20px]">chevron_right</span>
+        </button>
+      </div>
+    </div>
+
+    <div id="rail-{{ rayon.grouper.id }}" class="flex gap-space-lg overflow-x-auto no-scrollbar scroll-smooth pb-space-xs snap-x snap-mandatory">
+      {% for p in rayon.list %}
+      <article class="flex-none w-[270px] sm:w-[290px] snap-start rounded-lg bg-surface-container p-space-sm flex flex-col justify-between transition-colors duration-200
+                      {% if p.disponible %}group hover:bg-surface-container-high{% else %}opacity-50{% endif %}">
+        <div class="space-y-space-sm">
+          <div class="relative w-full aspect-[4/3] rounded bg-[#22272E] overflow-hidden flex items-center justify-center">
+            <span class="material-symbols-outlined text-[44px] text-on-surface-variant/40 group-hover:scale-105 transition-transform duration-300">{{ p.icone }}</span>
+            {% if not p.disponible %}
+              <span class="absolute top-2 left-2 px-2 py-0.5 rounded bg-surface-container-lowest text-[10px] font-label-md uppercase tracking-wider text-on-surface-variant">Épuisé</span>
+            {% endif %}
+          </div>
+          <div>
+            <h3 class="font-body-md text-body-md text-on-surface font-semibold truncate {% if not p.disponible %}line-through{% endif %}" title="{{ p.nom }}">{{ p.nom }}</h3>
+            {% if p.description %}
+              <p class="font-body-sm text-body-sm text-on-surface-variant truncate">{{ p.description }}</p>
+            {% endif %}
+          </div>
+        </div>
+        <div class="mt-space-md pt-space-xs flex items-center justify-between">
+          <span class="font-price-card text-price-card {% if p.disponible %}text-primary-container{% else %}text-on-surface-variant/60 line-through{% endif %}">{{ p.prix_vente|floatformat:"0g" }} FCFA</span>
+          {% if p.disponible %}
+            <a href="{% url 'ajouter_au_panier' p.id %}"
+               class="h-8 px-3 rounded-lg bg-surface-container-highest hover:bg-primary-container text-on-surface hover:text-on-primary font-label-md text-label-md transition-colors flex items-center gap-1">
+              <span class="material-symbols-outlined text-[16px]">add</span>Ajouter
+            </a>
+          {% else %}
+            <span class="h-8 px-3 rounded-lg bg-surface-container-low text-on-surface-variant font-label-md text-label-md flex items-center cursor-not-allowed">Rupture</span>
+          {% endif %}
+        </div>
+      </article>
+      {% endfor %}
+    </div>
+  </section>
   {% endfor %}
+
+  {% if not produits %}
+    <div class="text-center py-space-xxl space-y-space-md">
+      <p class="font-headline-sm text-headline-sm text-on-surface">Aucun produit trouvé.</p>
+      <a href="{% url 'accueil' %}" class="inline-flex items-center px-space-md h-10 rounded-lg bg-surface-container-highest hover:bg-surface-bright text-on-surface font-label-lg text-label-lg transition-colors">Voir tout le catalogue</a>
+    </div>
+  {% endif %}
 </div>
+
+<!-- Trois points de confiance, qui décrivent uniquement ce que le site fait vraiment -->
+<section class="w-full bg-surface-container-lowest py-space-xl">
+  <div class="max-w-[1440px] mx-auto px-margin md:px-margin-tablet lg:px-margin-desktop grid grid-cols-1 md:grid-cols-3 gap-space-lg">
+    <div class="flex items-start gap-space-md p-space-md rounded-lg bg-surface-container/60">
+      <div class="w-10 h-10 rounded-lg bg-surface-container-high flex items-center justify-center flex-shrink-0 text-primary-container"><span class="material-symbols-outlined text-[22px]">shopping_bag</span></div>
+      <div class="space-y-1">
+        <h4 class="font-label-lg text-label-lg text-on-surface">Commande en quelques clics</h4>
+        <p class="font-body-sm text-body-sm text-on-surface-variant leading-relaxed">Ajoutez plusieurs produits au panier et validez-les en une seule commande depuis votre compte.</p>
+      </div>
+    </div>
+    <div class="flex items-start gap-space-md p-space-md rounded-lg bg-surface-container/60">
+      <div class="w-10 h-10 rounded-lg bg-surface-container-high flex items-center justify-center flex-shrink-0 text-primary-container"><span class="material-symbols-outlined text-[22px]">inventory_2</span></div>
+      <div class="space-y-1">
+        <h4 class="font-label-lg text-label-lg text-on-surface">Disponibilité à jour</h4>
+        <p class="font-body-sm text-body-sm text-on-surface-variant leading-relaxed">Les produits épuisés sont signalés directement dans le catalogue.</p>
+      </div>
+    </div>
+    <div class="flex items-start gap-space-md p-space-md rounded-lg bg-surface-container/60">
+      <div class="w-10 h-10 rounded-lg bg-surface-container-high flex items-center justify-center flex-shrink-0 text-primary-container"><span class="material-symbols-outlined text-[22px]">receipt_long</span></div>
+      <div class="space-y-1">
+        <h4 class="font-label-lg text-label-lg text-on-surface">Suivi de vos commandes</h4>
+        <p class="font-body-sm text-body-sm text-on-surface-variant leading-relaxed">Retrouvez l'historique et le statut de chacune de vos commandes dans « Mes commandes ».</p>
+      </div>
+    </div>
+  </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  // Fait défiler une rangée de produits vers la gauche (-1) ou la droite (1)
+  function scrollRow(rowId, direction) {
+    const rangee = document.getElementById(rowId);
+    if (!rangee) return;
+    rangee.scrollBy({ left: 320 * direction, behavior: 'smooth' });
+  }
+</script>
 {% endblock %}
