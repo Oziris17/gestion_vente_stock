@@ -5,11 +5,21 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <title>{% block title %}Mon Magasin{% endblock %}</title>
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700&display=swap" rel="stylesheet"/>
-<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/>
+<!-- Police d'icônes allégée : seules les icônes listées dans icon_names sont téléchargées (quelques Ko au lieu de plusieurs centaines).
+     Si tu ajoutes une icône ailleurs dans le site, ajoute son nom ICI, en gardant l'ordre alphabétique. -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0&icon_names=add,arrow_forward,checkroom,chevron_left,chevron_right,cleaning_services,close,delete,devices,directions_walk,inventory_2,kitchen,local_drink,menu,receipt_long,restaurant,search,settings,shopping_bag,soap&display=block" rel="stylesheet"/>
+<script>
+  // Les icônes restent invisibles tant que la police n'est pas chargée : on évite d'afficher les mots "shopping_bag", "arrow_forward"...
+  document.fonts.load('24px "Material Symbols Outlined"').then(function () {
+    document.documentElement.classList.add('icones-pretes');
+  });
+</script>
 <style>
   body { overscroll-behavior: none; }
   .no-scrollbar { scrollbar-width: none; }
   .no-scrollbar::-webkit-scrollbar { display: none; }
+  .material-symbols-outlined { width: 1em; height: 1em; overflow: hidden; visibility: hidden; }
+  .icones-pretes .material-symbols-outlined { visibility: visible; }
   summary { list-style: none; }
   summary::-webkit-details-marker { display: none; }
 </style>
