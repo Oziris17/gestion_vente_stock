@@ -7,6 +7,7 @@ Il peut être relancé sans créer de doublons.
 Les prix sont en FCFA et sont des ordres de grandeur inventés pour les tests.
 """
 import os
+import sys
 from datetime import timedelta
 from decimal import Decimal
 
@@ -176,10 +177,10 @@ def enregistrer_mouvement(produit, magasin, type_mvt, quantite, motif):
 # ---------------------------------------------------------------------------
 @transaction.atomic
 def peupler():
-    # 1) Catégories. update_or_create : retrouve l'élément s'il existe, sinon le crée.
+    # 1) Catégories. get_or_create : retrouve l'élément s'il existe, sinon le crée.
     categories = {}
     for nom, description in CATEGORIES.items():
-        categories[nom], _ = Categorie.objects.update_or_create(
+        categories[nom], _ = Categorie.objects.get_or_create(
             nom=nom, defaults={'description': description})
 
     # 2) Marques
@@ -187,14 +188,25 @@ def peupler():
     for nom in MARQUES:
         marques[nom], _ = Marque.objects.get_or_create(nom=nom)
 
-    # 3) Magasins
+    # 3) Magasins. Un seul magasin peut être "vente en ligne" : on ne le demande donc
+    #    que si aucun autre magasin n'a déjà ce rôle (sinon la base refuserait).
     magasins = []
     for code, nom, adresse, en_ligne in MAGASINS:
-        magasin, _ = Magasin.objects.update_or_create(
+        deja_en_ligne = Magasin.objects.filter(vente_en_ligne=True).exists()
+        magasin, _ = Magasin.objects.get_or_create(
             code_magasin=code,
-            defaults={'nom': nom, 'adresse': adresse, 'vente_en_ligne': en_ligne})
+            defaults={'nom': nom, 'adresse': adresse,
+                      'vente_en_ligne': en_ligne and not deja_en_ligne})
         magasins.append(magasin)
     principal, secondaire = magasins
+
+    # Le magasin dont le stock alimente le site. Si aucun magasin n'a ce rôle, la vitrine
+    # affiche TOUS les produits en "Rupture" : on désigne alors le magasin principal.
+    magasin_en_ligne = Magasin.objects.filter(vente_en_ligne=True).first()
+    if magasin_en_ligne is None:
+        principal.vente_en_ligne = True
+        principal.save()
+        magasin_en_ligne = principal
 
     # 4) Fournisseurs, et quel fournisseur fournit quelle catégorie
     fournisseur_de = {}
@@ -209,7 +221,7 @@ def peupler():
     # 5) Produits (le code-barres fictif est fabriqué à partir du numéro d'ordre)
     produits = {}
     for i, (code, nom, cat, marque, unite, achat, vente, _q, _s) in enumerate(PRODUITS, start=1):
-        produits[code], _ = Produits.objects.update_or_create(
+        produits[code], _ = Produits.objects.get_or_create(
             code_produit=code,
             defaults={
                 'nom': nom,
@@ -222,25 +234,37 @@ def peupler():
                 'taux_tva': TVA,
             })
 
-    # 6) Stock et mouvements : seulement si le stock est encore vide (évite les doublons)
-    if Stock.objects.exists():
-        print('Le stock existe déjà : étape stock et mouvements ignorée.')
-    else:
-        for code, _n, _c, _m, _u, _a, _v, qte, seuil in PRODUITS:
-            produit = produits[code]
-            # Magasin principal : quantité complète. Bonapriso : la moitié.
-            for magasin, quantite in ((principal, qte), (secondaire, qte // 2)):
-                Stock.objects.create(produit=produit, magasin=magasin,
-                                     quantite=D(0), seuil_alerte=D(seuil))
-                if quantite > 0:
-                    enregistrer_mouvement(produit, magasin, MouvementStock.Type.ENTREE,
-                                          quantite, 'Stock initial')
-        # Quelques mouvements de démonstration (ventes, casse, inventaire...)
+    # 6) Stock et mouvements, produit par produit (relançable sans doublons).
+    #    - le magasin "vente en ligne" reçoit la quantité complète, les autres la moitié ;
+    #    - une ligne de stock vide et SANS historique reçoit son stock initial ;
+    #    - une ligne qui a déjà un historique n'est jamais modifiée.
+    autres = [m for m in (principal, secondaire) if m.pk != magasin_en_ligne.pk]
+    cibles = [(magasin_en_ligne, 1)] + [(m, 2) for m in autres]
+    stocks_initialises = 0
+    for code, _n, _c, _m, _u, _a, _v, qte, seuil in PRODUITS:
+        produit = produits[code]
+        for magasin, diviseur in cibles:
+            quantite = qte // diviseur
+            stock, _ = Stock.objects.get_or_create(
+                produit=produit, magasin=magasin,
+                defaults={'quantite': D(0), 'seuil_alerte': D(seuil)})
+            a_un_historique = MouvementStock.objects.filter(produit=produit, magasin=magasin).exists()
+            if quantite > 0 and stock.quantite == 0 and not a_un_historique:
+                enregistrer_mouvement(produit, magasin, MouvementStock.Type.ENTREE,
+                                      quantite, 'Stock initial')
+                stocks_initialises += 1
+
+    # Mouvements de démonstration : une seule fois, et seulement si le journal ne contient
+    # encore que des "Stock initial". Un mouvement impossible est simplement ignoré.
+    if stocks_initialises and not MouvementStock.objects.exclude(motif='Stock initial').exists():
         for code, type_mvt, quantite, motif in MOUVEMENTS_DEMO:
-            enregistrer_mouvement(produits[code], principal, type_mvt, quantite, motif)
+            try:
+                enregistrer_mouvement(produits[code], magasin_en_ligne, type_mvt, quantite, motif)
+            except ValueError as erreur:
+                print(f'  Mouvement de démonstration ignoré : {erreur}')
 
     # 7) Commande fournisseur n°1 : reçue en entier, avec sa livraison
-    cmd1, _ = CommandeFournisseur.objects.update_or_create(
+    cmd1, _ = CommandeFournisseur.objects.get_or_create(
         numero_commande='CF-2026-001',
         defaults={'fournisseur': fournisseur_de['Alimentaire'], 'magasin': principal,
                   'statut': CommandeFournisseur.Statut.RECUE, 'cree_par': 'script_de_test'})
@@ -278,7 +302,14 @@ def peupler():
 
 
 if __name__ == '__main__':
-    peupler()
+    try:
+        peupler()
+    except Exception as erreur:
+        # Ce script peut être lancé pendant le déploiement (Build Command) : un échec ici
+        # ne doit pas empêcher le site de démarrer. Le message reste visible dans les logs.
+        print(f'ÉCHEC du peuplement (le déploiement continue) : {type(erreur).__name__}: {erreur}')
+        sys.exit(0)
+
     print('Terminé. Contenu de la base :')
     print(f'  Catégories : {Categorie.objects.count()}')
     print(f'  Marques : {Marque.objects.count()}')
@@ -288,3 +319,11 @@ if __name__ == '__main__':
     print(f'  Lignes de stock : {Stock.objects.count()}')
     print(f'  Mouvements de stock : {MouvementStock.objects.count()}')
     print(f'  Commandes fournisseur : {CommandeFournisseur.objects.count()}')
+    en_ligne = Magasin.objects.filter(vente_en_ligne=True).first()
+    if en_ligne is None:
+        print('  ATTENTION : aucun magasin n\'est marqué "vente en ligne".')
+    else:
+        en_stock = Stock.objects.filter(magasin=en_ligne, quantite__gt=0).count()
+        print(f'  Magasin en ligne : {en_ligne.nom} ({en_stock} produits en stock)')
+        if not en_ligne.actif:
+            print('  ATTENTION : ce magasin est inactif, le site peut l\'ignorer.')
